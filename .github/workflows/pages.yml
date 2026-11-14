@@ -29,7 +29,7 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff check
       - run: uv run pytest
-      - run: node --test web/tests
+      - run: node --test "web/tests/*.test.mjs"
 
   deploy:
     if: github.event_name != 'pull_request'
