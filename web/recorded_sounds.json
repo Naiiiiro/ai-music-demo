@@ -1,0 +1,38 @@
+{
+  "release_base_url": "https://github.com/Naiiiiro/ai-music-demo/releases/download/sound-assets-v1",
+  "recordings": [
+    {
+      "effect_name": "engine",
+      "asset_file_name": "engine_revving.mp3",
+      "sha256": "ae4e2f1fabdd79dbccc02699c310dbb8d990dce38f8e54a3b64ea3e069925f02",
+      "byte_size": 636597,
+      "title": "car revving.aif",
+      "author": "Walter_Odington",
+      "license_name": "CC0 1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "source_page_url": "https://freesound.org/people/Walter_Odington/sounds/18620/"
+    },
+    {
+      "effect_name": "traffic",
+      "asset_file_name": "traffic_passing.mp3",
+      "sha256": "2d7d0e1c0001f5ca5c09a176dfa6a8047694fe11ff191ba12adc681839cf05fd",
+      "byte_size": 622135,
+      "title": "Cars Passing By",
+      "author": "FlatHill",
+      "license_name": "CC0 1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "source_page_url": "https://freesound.org/people/FlatHill/sounds/211512/"
+    },
+    {
+      "effect_name": "cat",
+      "asset_file_name": "cat_meow.mp3",
+      "sha256": "601b1bfacc9ae3f69400e5cf599c130a23a301abf3bece596f48c8735e69259e",
+      "byte_size": 36113,
+      "title": "Cat meow",
+      "author": "philsapphire",
+      "license_name": "CC0 1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "source_page_url": "https://freesound.org/people/philsapphire/sounds/256452/"
+    }
+  ]
+}

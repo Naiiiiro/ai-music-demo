@@ -1,4 +1,6 @@
 output/
+# 部署時由 fetch-recorded-sounds 從 GitHub Release 下載的實錄音檔
+web/recorded_sounds/
 # 音訊一律由瀏覽器或命令列現場產生，任何音訊 binary 都不進 repo
 *.wav
 *.m4a
