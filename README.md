@@ -66,7 +66,7 @@ web/recorded_sounds/（被 .gitignore 排除）
 uv sync
 uv run benchmark-resources --output output/benchmark.json           # 量測不同曲長的資源用量（JSON，不產生音訊檔）
 uv run pytest                                                       # Python 測試
-node --test web/tests                                               # JavaScript 測試
+node --test "web/tests/*.test.mjs"                                  # JavaScript 測試（Node 22 起支援 glob）
 
 # 網頁版：瀏覽器的 ES module 必須透過 HTTP 載入
 uv run fetch-recorded-sounds                   # 下載實錄音檔到 web/recorded_sounds/（不下載也能用合成版）
