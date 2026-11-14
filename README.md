@@ -1,13 +1,13 @@
 # ai-music-demo
 
-這是演算法作曲的示範專案：程式只依樂理規則產生音樂，**不使用任何 AI 模型，也不用取樣音色**。專案用來比較兩種把音樂放上網站的做法各要多少資源：
+這是演算法作曲的示範專案：程式只依樂理規則產生音樂，**不使用任何 AI 模型，也不用取樣音色**。網頁的音效區另外提供 CC0 實地錄音，和合成版並排對照。專案用來比較兩種把音樂放上網站的做法各要多少資源：
 
 | 做法 | 程式 | 伺服器要傳給訪客的東西 |
 |---|---|---|
 | 伺服器預先算好，訪客下載音訊檔（只估算，不實際產生） | `src/ai_music_demo/`（Python） | WAV 或 AAC 檔，大小由 `benchmark-resources` 用公式算出 |
 | 訪客的瀏覽器即時作曲、即時合成 | `web/`（JavaScript + Web Audio） | 音樂約 9 KB 的程式碼（gzip 壓縮後，加上音效共約 16 KB） |
 
-音訊 binary 只在瀏覽器裡產生：Python 端只在記憶體合成、量測，不寫出任何音訊檔；`.gitignore` 擋掉所有音訊副檔名，`web/tests/no_audio_binary.test.mjs` 會在 `web/` 出現音訊檔時失敗。
+版控裡沒有任何音訊檔：Python 端只在記憶體合成、量測；實錄音檔放在 GitHub Release 附件，部署時才下載（見下方〈實錄音效〉）。`.gitignore` 擋掉所有音訊副檔名，`web/tests/no_audio_binary.test.mjs` 會在 git 追蹤到音訊檔時失敗。
 
 ## 音樂性從哪裡來
 
@@ -24,7 +24,7 @@
 
 ## 音效（與音樂分開）
 
-網頁另有獨立的音效區，用自己的 AudioContext 播放，不經過音樂混音台，也一樣不載入音訊檔。訊號與控制曲線在 `web/effect_signals.js`（純計算，可在 Node 測試），接濾波器與排程在 `web/sound_effects.js`。
+網頁另有獨立的音效區，用自己的 AudioContext 播放，不經過音樂混音台。每個音效有「合成」與「實錄」兩個按鈕，兩者走同一條輸出鏈，音量可以公平對照。下表是合成版；實錄版見〈實錄音效〉。訊號與控制曲線在 `web/effect_signals.js`（純計算，可在 Node 測試），接濾波器與排程在 `web/sound_effects.js`。
 
 自然的聲音需要寬頻雜訊（輪胎、排氣、氣音）。這裡不用亂數，改用 31 位元 LFSR（線性回授移位暫存器，老遊戲機雜訊聲道的做法）：固定起始狀態、純位元運算，每次輸出都一樣（`signal_generators.js` 的 `generate_noise_samples`）。
 
@@ -33,6 +33,32 @@
 | 引擎（8 秒） | 依轉速算出每次點火的時間點，每次點火產生一個帶雜訊、快速衰減的排氣脈衝；四個汽缸力道不同、點火時間有 ±4% 偏移，聽起來有「噗噗」的起伏。再經兩個排氣管共鳴（140、520 Hz），高頻量跟著轉速與油門變化。時間軸：怠速 → 催油 → 收油換檔 → 再催 → 滑回怠速 |
 | 車流（30 秒） | 每台車是胎噪（LFSR 雜訊經帶通）加低沉引擎音。音量依 1/距離、左右依方位角、音高依距離變化速度連續套用都卜勒（胎噪的中心頻率也一起變，經過時有「咻——」往下掉），越遠高頻越少。兩條車道、8 台車寫定在 `TRAFFIC_PASSES`；背景是低通後緩慢起伏的遠方車流 |
 | 貓叫（約 1 秒） | 泛音依 1/k^1.4 遞減的聲帶波形，加兩個不等速的顫音與隨聲帶開合起伏的氣音；嘴型從閉（「m」鼻音）到開再收，三個共鳴峰從「i」經「a」滑到「u」，所有轉折都用平滑曲線 |
+
+### 實錄音效
+
+| 音效 | 錄音（Freesound） | 授權 | 長度 | 大小 |
+|---|---|---|---|---|
+| 引擎 | [car revving.aif](https://freesound.org/people/Walter_Odington/sounds/18620/)，Walter_Odington | CC0 1.0 | 36 秒 | 622 KB |
+| 車流 | [Cars Passing By](https://freesound.org/people/FlatHill/sounds/211512/)，FlatHill | CC0 1.0 | 28.5 秒 | 608 KB |
+| 貓叫 | [Cat meow](https://freesound.org/people/philsapphire/sounds/256452/)，philsapphire | CC0 1.0 | 1.6 秒 | 35 KB |
+
+CC0 是放棄著作權的公開授權：可商用、不必標示作者。網頁仍列出來源。
+
+音檔從哪裡來、怎麼保證每次都一樣：
+
+```
+web/recorded_sounds.json（進版控）：每個音檔的檔名、SHA-256、大小、授權、原始頁面
+        │
+GitHub Release「sound-assets-v1」附件：音檔本身（不在 Git 歷史裡）
+        │  uv run fetch-recorded-sounds：下載、核對 SHA-256，不符就失敗；已正確的檔案跳過
+web/recorded_sounds/（被 .gitignore 排除）
+        │
+網頁按「實錄」時才從同一個網站載入，不連第三方平台
+```
+
+部署由 `.github/workflows/pages.yml` 執行：PR 只跑測試；推送到 `main` 時測試通過後下載音檔並發布到 GitHub Pages。
+
+更換音檔：上傳新檔到新的 Release（例如 `sound-assets-v2`），再更新 `recorded_sounds.json` 的 `release_base_url`、`sha256`、`byte_size`。舊 Release 保留，舊版本的部署才拿得到原本的檔案。
 
 ## 使用方式
 
@@ -43,15 +69,16 @@ uv run pytest                                                       # Python 測
 node --test web/tests                                               # JavaScript 測試
 
 # 網頁版：瀏覽器的 ES module 必須透過 HTTP 載入
+uv run fetch-recorded-sounds                   # 下載實錄音檔到 web/recorded_sounds/（不下載也能用合成版）
 python3 -m http.server 8765 --directory web    # 開啟 http://127.0.0.1:8765
 # 網址加上 ?benchmark=1 會跑離線量測，結果印在頁面上和 console 裡
 ```
 
 模組分層見 [docs/module_map.md](docs/module_map.md)。
 
-## 外部音訊來源（參考資料，本專案不使用）
+## 外部音訊來源（參考資料）
 
-想拿現成音檔或 AI 生成的音樂當對照組時，可以從下面三份文件找來源和使用方式。下載或生成的檔案請放在 `output/`，不要放進 repo。
+本專案目前只用到上面三個 Freesound CC0 錄音。想再找現成音檔或 AI 生成的音樂當對照組時，可以從下面三份文件找來源和使用方式。新音檔一律走 Release 附件加來源清單，不要放進 repo。
 
 | 文件 | 內容 |
 |---|---|
