@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>演算法音樂示範</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; }
+    button { font-size: 1rem; padding: 0.5rem 1rem; margin-right: 0.5rem; }
+    pre { background: #f3f3f3; padding: 0.75rem; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>演算法音樂示範</h1>
+  <p>按下「播放」後，瀏覽器會依樂理規則即時作曲並合成，不會下載任何音訊檔。</p>
+  <p>
+    <button id="play_button">播放</button>
+    <button id="stop_button" disabled>停止</button>
+  </p>
+  <h2>音效（與音樂分開）</h2>
+  <p>汽車引擎、馬路車流、貓叫，全部現場合成，不經過音樂的混音台。</p>
+  <p>
+    <button class="effect_button" data-effect="engine">引擎（8 秒）</button>
+    <button class="effect_button" data-effect="traffic">車流（30 秒）</button>
+    <button class="effect_button" data-effect="cat">貓叫</button>
+    <button id="effect_stop_button" disabled>停止音效</button>
+  </p>
+  <pre id="benchmark_output"></pre>
+  <script type="module">
+    import { run_offline_benchmark, start_endless_playback } from "./browser_player.js";
+    import { start_sound_effect } from "./sound_effects.js";
+
+    const play_button = document.getElementById("play_button");
+    const stop_button = document.getElementById("stop_button");
+    let stop_playback = null;
+
+    play_button.addEventListener("click", () => {
+      stop_playback = start_endless_playback();
+      play_button.disabled = true;
+      stop_button.disabled = false;
+    });
+    stop_button.addEventListener("click", () => {
+      stop_playback?.();
+      play_button.disabled = false;
+      stop_button.disabled = true;
+    });
+
+    const effect_buttons = document.querySelectorAll(".effect_button");
+    const effect_stop_button = document.getElementById("effect_stop_button");
+    let stop_current_effect = null;
+
+    function set_effect_playing(is_playing) {
+      effect_buttons.forEach((effect_button) => { effect_button.disabled = is_playing; });
+      effect_stop_button.disabled = !is_playing;
+    }
+
+    effect_buttons.forEach((effect_button) => {
+      effect_button.addEventListener("click", () => {
+        stop_current_effect = start_sound_effect(effect_button.dataset.effect, () => {
+          stop_current_effect = null;
+          set_effect_playing(false);
+        });
+        set_effect_playing(true);
+      });
+    });
+    effect_stop_button.addEventListener("click", () => stop_current_effect?.());
+
+    if (new URLSearchParams(location.search).has("benchmark")) {
+      const benchmark_output = document.getElementById("benchmark_output");
+      run_offline_benchmark()
+        .then((benchmark_result) => { benchmark_output.textContent = "BENCHMARK " + JSON.stringify(benchmark_result); console.log("BENCHMARK_RESULT " + JSON.stringify(benchmark_result)); })
+        .catch((benchmark_error) => { benchmark_output.textContent = "BENCHMARK_ERROR " + benchmark_error; });
+    }
+  </script>
+</body>
+</html>

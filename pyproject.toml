@@ -1,0 +1,25 @@
+[project]
+name = "ai-music-demo"
+version = "0.1.0"
+description = "演算法作曲示範：樂理規則產生音樂，並量測網站部署的資源需求"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "numpy>=2.5.4",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.3,<0.9.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.5",
+]
+
+[project.scripts]
+benchmark-resources = "ai_music_demo.resource_benchmark:main"
+
+[tool.ruff]
+line-length = 120
