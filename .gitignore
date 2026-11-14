@@ -10,3 +10,5 @@ web/recorded_sounds/
 *.flac
 .venv/
 __pycache__/
+# 場景 HTML 放在 GitHub Release 附件，由 evaluate-sound-plan 下載並核對 SHA-256
+sound_plans/*/*.html

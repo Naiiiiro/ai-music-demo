@@ -11,6 +11,12 @@
 | `resource_benchmark.py` | 命令列入口 | `main`（`benchmark-resources`）、`wave_file_bytes`、`aac_estimated_bytes` | composition_engine、audio_renderer |
 | `recorded_sound_manifest.py` | 領域邏輯（純計算） | `RecordedSound`、`RecordedSoundManifest`、`parse_recorded_sound_manifest`、`content_matches_recording`、`ManifestFormatError` | 無 |
 | `recorded_sound_fetcher.py` | 命令列入口（下載 Release 附件） | `main`（`fetch-recorded-sounds`）、`fetch_all_recordings`、`download_with_retry`、`RecordingFetchError` | recorded_sound_manifest |
+| `sound_plan_model.py` | 領域邏輯（純計算） | `SceneComponent`、`ComponentTag`、`SoundAsset`、`SoundPlanRules`、`ComponentSnapshot`、`parse_sound_plan_rules`、`parse_component_snapshot`、`snapshot_to_json`、`SoundPlanFormatError` | 無 |
+| `sound_plan_evaluation.py` | 領域邏輯（純計算） | `evaluate_sound_plan`、`SoundPlanEvaluation`、`TagEvaluation`、`VersionDifference` | sound_plan_model |
+| `sound_plan_report.py` | 輸出（組 Markdown 文字，不寫檔） | `render_sound_plan_report` | sound_plan_evaluation、sound_plan_model |
+| `scene_component_extractor.py` | 基礎設施（headless Chrome 執行場景 HTML） | `extract_component_snapshot`、`inject_component_dump`、`extract_tag_definitions`、`parse_component_dump`、`ComponentExtractionError` | sound_plan_model |
+| `scene_source_manifest.py` | 領域邏輯（純計算） | `SceneSource`、`parse_scene_source`、`content_matches_scene`、`SceneSourceFormatError` | 無 |
+| `sound_plan_command.py` | 命令列入口 | `main`（`evaluate-sound-plan`）、`run_evaluation`、`ensure_scene_html` | scene_source_manifest、recorded_sound_fetcher（只用下載與重試）、scene_component_extractor、sound_plan_evaluation、sound_plan_report、sound_plan_model |
 | `web/browser_composer.js` | 領域邏輯（瀏覽器端，純計算） | `compose_bar`、`MELODY_PHRASES`、`euclidean_rhythm` | 無 |
 | `web/signal_generators.js` | 領域邏輯（瀏覽器端，純計算） | `generate_inharmonic_samples`、`METALLIC_PARTIAL_FREQUENCIES`、`generate_noise_samples`、`create_noise_register`、`generate_impulse_samples`、`generate_pluck_samples` | 無 |
 | `web/effect_signals.js` | 領域邏輯（瀏覽器端，純計算） | `generate_engine_pulse_samples`、`car_pass_state`、`generate_meow_source_samples`、`smooth_interpolate`、`sample_control_curve`、`TRAFFIC_PASSES` | signal_generators |
@@ -20,4 +26,6 @@
 | `web/browser_player.js` | 基礎設施（Web Audio 排程） | `start_endless_playback`、`run_offline_benchmark` | browser_composer、instrument_voices、mixing_console |
 | `web/sound_effects.js` | 基礎設施（Web Audio 音效，與音樂分開） | `start_sound_effect`、`start_recorded_effect`、`SOUND_EFFECT_SCENES` | effect_signals、signal_generators |
 | `web/index.html` | 介面入口 | — | browser_player、sound_effects、recorded_sound_manifest |
+| `sound_plans/*/sound_rules.json` | 資料（音效規劃規則：共用素材、邊界決議） | — | 由 sound_plan_command 讀取 |
+| `sound_plans/*/scene_source.json` | 資料（場景 HTML 的 Release 位置與 SHA-256） | — | 由 sound_plan_command 讀取 |
 | `web/recorded_sounds.json` | 資料（實錄音檔來源清單） | — | 由 recorded_sound_fetcher 與 recorded_sound_manifest.js 讀取 |

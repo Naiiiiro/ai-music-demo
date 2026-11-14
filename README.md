@@ -85,3 +85,26 @@ python3 -m http.server 8765 --directory web    # 開啟 http://127.0.0.1:8765
 | [可直接使用的音檔來源](docs/audio_sources/ready_to_use_audio.md) | MCP 伺服器、免版稅音樂庫、音效庫 |
 | [用提示詞生成音樂的來源](docs/audio_sources/prompt_generated_music.md) | 雲端 AI 音樂生成 API、可在本機跑的開源模型 |
 | [標籤與描述的靈感來源](docs/audio_sources/description_inspiration_datasets.md) | 附音樂標籤或文字描述的資料集 |
+
+## 場景音效規劃
+
+`sound_plans/` 底下每個資料夾評估一個 3D 場景 HTML：哪些組件要設計音效、哪些組件共用同一組音效素材。
+
+| 檔案 | 用途 | 誰維護 |
+|---|---|---|
+| `scene_source.json` | 場景 HTML 在 GitHub Release 的下載位置、SHA-256 與大小 | 人工（換版時） |
+| `*.html` | 要評估的場景，被 `.gitignore` 排除，指令執行時自動下載並核對 | 指令下載 |
+| `sound_rules.json` | 判斷原則、共用素材與比對的組件 id、各類別不設計的理由、邊界組件決議 | 人工 |
+| `component_snapshot.json` | 上一次評估取出的完整組件清單，用來比對新舊版差異 | 指令產生 |
+| `*-sound-plan.md` | 評估報告（統計、共用素材、邊界決議、版本差異、規則檢查、各標籤清單） | 指令產生 |
+
+更新 HTML 後重新評估：
+
+```bash
+uv run evaluate-sound-plan sound_plans/screw_press_separator
+```
+
+- 場景 HTML 約 4 MB，比照實錄音檔放在 GitHub Release 附件。本機檔案的 SHA-256 不符就重新下載，下載回來仍不符則失敗、不寫檔。
+- 換新版 HTML：上傳到新的 tag（例如 `gh release create scene-assets-v2 新檔.html`），改掉 `scene_source.json` 的 `release_base_url` 結尾的 tag、`asset_file_name`、`sha256`（`shasum -a 256` 的結果）與 `byte_size`，再重跑上面的指令。舊 tag 保留，舊版報告才對得回原頁面。
+- 組件清單大多是頁面執行時才產生，所以指令會在暫存資料夾複製頁面、插入輸出組件清單的程式，用 headless Chrome 跑一次；原檔不會被改。預設用 macOS 的 Chrome 路徑，其他系統用 `CHROME_EXECUTABLE_PATH` 指定。
+- 報告第四節列出新版新增、移除的組件，新增的要人工確認後補進 `sound_rules.json`；第五節列出這一版已經對不到任何組件的規則。
