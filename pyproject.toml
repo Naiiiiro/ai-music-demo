@@ -20,6 +20,7 @@ dev = [
 
 [project.scripts]
 benchmark-resources = "ai_music_demo.resource_benchmark:main"
+fetch-recorded-sounds = "ai_music_demo.recorded_sound_fetcher:main"
 
 [tool.ruff]
 line-length = 120
