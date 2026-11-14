@@ -8,6 +8,10 @@
     body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; }
     button { font-size: 1rem; padding: 0.5rem 1rem; margin-right: 0.5rem; }
     pre { background: #f3f3f3; padding: 0.75rem; overflow-x: auto; }
+    .effect_row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
+    .effect_row span { min-width: 7rem; }
+    .effect_row button { margin-right: 0; }
+    #recording_credits { font-size: 0.9rem; }
   </style>
 </head>
 <body>
@@ -18,17 +22,25 @@
     <button id="stop_button" disabled>停止</button>
   </p>
   <h2>音效（與音樂分開）</h2>
-  <p>汽車引擎、馬路車流、貓叫，全部現場合成，不經過音樂的混音台。</p>
-  <p>
-    <button class="effect_button" data-effect="engine">引擎（8 秒）</button>
-    <button class="effect_button" data-effect="traffic">車流（30 秒）</button>
-    <button class="effect_button" data-effect="cat">貓叫</button>
-    <button id="effect_stop_button" disabled>停止音效</button>
-  </p>
+  <p>汽車引擎、馬路車流、貓叫，每個都能比較「現場合成」與「實地錄音」，兩者都不經過音樂的混音台。實錄音檔只在按下「實錄」時才下載。</p>
+  <div class="effect_row"><span>引擎</span>
+    <button class="effect_button" data-effect="engine" data-version="synthesized">合成（8 秒）</button>
+    <button class="effect_button" data-effect="engine" data-version="recorded" disabled>實錄</button></div>
+  <div class="effect_row"><span>車流</span>
+    <button class="effect_button" data-effect="traffic" data-version="synthesized">合成（30 秒）</button>
+    <button class="effect_button" data-effect="traffic" data-version="recorded" disabled>實錄</button></div>
+  <div class="effect_row"><span>貓叫</span>
+    <button class="effect_button" data-effect="cat" data-version="synthesized">合成（1 秒）</button>
+    <button class="effect_button" data-effect="cat" data-version="recorded" disabled>實錄</button></div>
+  <p><button id="effect_stop_button" disabled>停止音效</button></p>
+  <p id="recording_status" role="status"></p>
+  <h3>實錄來源</h3>
+  <ul id="recording_credits"></ul>
   <pre id="benchmark_output"></pre>
   <script type="module">
     import { run_offline_benchmark, start_endless_playback } from "./browser_player.js";
-    import { start_sound_effect } from "./sound_effects.js";
+    import { SOUND_EFFECT_SCENES, start_recorded_effect, start_sound_effect } from "./sound_effects.js";
+    import { RECORDED_SOUND_MANIFEST_PATH, parse_recorded_sound_manifest, recording_file_url } from "./recorded_sound_manifest.js";
 
     const play_button = document.getElementById("play_button");
     const stop_button = document.getElementById("stop_button");
@@ -47,23 +59,72 @@
 
     const effect_buttons = document.querySelectorAll(".effect_button");
     const effect_stop_button = document.getElementById("effect_stop_button");
+    const recording_status = document.getElementById("recording_status");
+    const recording_credits = document.getElementById("recording_credits");
     let stop_current_effect = null;
+    let recordings_by_effect = {};
+    const EFFECT_DISPLAY_NAMES = Object.freeze({ engine: "引擎", traffic: "車流", cat: "貓叫" });
+
+    function is_effect_available(effect_button) {
+      return effect_button.dataset.version === "synthesized" || Object.hasOwn(recordings_by_effect, effect_button.dataset.effect);
+    }
 
     function set_effect_playing(is_playing) {
-      effect_buttons.forEach((effect_button) => { effect_button.disabled = is_playing; });
+      effect_buttons.forEach((effect_button) => { effect_button.disabled = is_playing || !is_effect_available(effect_button); });
       effect_stop_button.disabled = !is_playing;
+    }
+
+    function on_effect_finished() {
+      stop_current_effect = null;
+      set_effect_playing(false);
+    }
+
+    function on_recording_failed(load_error) {
+      recording_status.textContent = `${load_error.message}。本機開發請先執行 uv run fetch-recorded-sounds。`;
     }
 
     effect_buttons.forEach((effect_button) => {
       effect_button.addEventListener("click", () => {
-        stop_current_effect = start_sound_effect(effect_button.dataset.effect, () => {
-          stop_current_effect = null;
-          set_effect_playing(false);
-        });
+        const effect_name = effect_button.dataset.effect;
+        recording_status.textContent = "";
+        stop_current_effect = effect_button.dataset.version === "recorded"
+          ? start_recorded_effect(recording_file_url(recordings_by_effect[effect_name]), on_effect_finished, on_recording_failed)
+          : start_sound_effect(effect_name, on_effect_finished);
         set_effect_playing(true);
       });
     });
     effect_stop_button.addEventListener("click", () => stop_current_effect?.());
+
+    function append_link(parent_element, link_text, link_url) {
+      const link_element = document.createElement("a");
+      link_element.href = link_url;
+      link_element.textContent = link_text;
+      link_element.rel = "noopener";
+      parent_element.append(link_element);
+    }
+
+    function render_recording_credits() {
+      for (const recording of Object.values(recordings_by_effect)) {
+        const credit_item = document.createElement("li");
+        credit_item.append(`${EFFECT_DISPLAY_NAMES[recording.effect_name]}：`);
+        append_link(credit_item, `「${recording.title}」by ${recording.author}（Freesound）`, recording.source_page_url);
+        credit_item.append("，授權 ");
+        append_link(credit_item, recording.license_name, recording.license_url);
+        recording_credits.append(credit_item);
+      }
+    }
+
+    fetch(RECORDED_SOUND_MANIFEST_PATH)
+      .then((http_response) => {
+        if (!http_response.ok) throw new Error(`載入實錄來源清單失敗（HTTP ${http_response.status}）`);
+        return http_response.json();
+      })
+      .then((raw_manifest) => {
+        recordings_by_effect = parse_recorded_sound_manifest(raw_manifest, Object.keys(SOUND_EFFECT_SCENES));
+        render_recording_credits();
+        set_effect_playing(stop_current_effect !== null);
+      })
+      .catch((manifest_error) => { recording_status.textContent = `實錄音效無法使用：${manifest_error.message}`; });
 
     if (new URLSearchParams(location.search).has("benchmark")) {
       const benchmark_output = document.getElementById("benchmark_output");

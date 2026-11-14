@@ -1,7 +1,7 @@
 /**
  * 音效（Web Audio）：汽車引擎、馬路車流、貓叫。與音樂完全分開：自己的 AudioContext、自己的輸出鏈，
- * 不經過 mixing_console。訊號與控制曲線由 effect_signals 算好，這裡只負責接上濾波器並排進時間軸；
- * 不載入音訊檔，也不用亂數，每次播放都一樣。
+ * 不經過 mixing_console。合成版的訊號與控制曲線由 effect_signals 算好，這裡只負責接上濾波器並排進時間軸，
+ * 不用亂數，每次播放都一樣。實錄版從同一個網站載入部署時下載的音檔，走同一條輸出鏈，音量才能公平對照。
  */
 import {
   ENGINE_RPM_POINTS,
@@ -170,19 +170,16 @@ export const SOUND_EFFECT_SCENES = Object.freeze({
 });
 
 /**
- * 播放一段音效，播完自動停止。音效有自己的 AudioContext，與音樂播放互不影響。
- * @param {string} effect_name 音效名稱，必須存在於 SOUND_EFFECT_SCENES
+ * 開一條音效輸出鏈（自己的 AudioContext → 音量 → 保護用壓縮器），並提供停止與自動停止的控制。
  * @param {() => void} on_finished 播完或被停止時呼叫一次
- * @returns {() => void} 提前停止的函式
  */
-export function start_sound_effect(effect_name, on_finished) {
-  if (!Object.hasOwn(SOUND_EFFECT_SCENES, effect_name)) throw new RangeError(`沒有這個音效：${effect_name}`);
+function open_effect_output(on_finished) {
   const audio_context = new AudioContext();
   const effects_gain = create_gain(audio_context, EFFECTS_VOLUME_GAIN);
   const safety_limiter = audio_context.createDynamicsCompressor();
   effects_gain.connect(safety_limiter).connect(audio_context.destination);
-  const scene_seconds = SOUND_EFFECT_SCENES[effect_name](audio_context, effects_gain, audio_context.currentTime + START_DELAY_SECONDS);
   let is_stopped = false;
+  let auto_stop_handle = null;
   function stop_effect() {
     if (is_stopped) return;
     is_stopped = true;
@@ -190,6 +187,57 @@ export function start_sound_effect(effect_name, on_finished) {
     audio_context.close();
     on_finished();
   }
-  const auto_stop_handle = setTimeout(stop_effect, (scene_seconds + AUTO_STOP_MARGIN_SECONDS) * 1000);
-  return stop_effect;
+  return {
+    audio_context,
+    output_node: effects_gain,
+    start_time: () => audio_context.currentTime + START_DELAY_SECONDS,
+    stop_effect,
+    stop_after: (scene_seconds) => { auto_stop_handle = setTimeout(stop_effect, (scene_seconds + AUTO_STOP_MARGIN_SECONDS) * 1000); },
+    is_stopped: () => is_stopped,
+  };
+}
+
+/**
+ * 播放一段合成音效，播完自動停止。音效有自己的 AudioContext，與音樂播放互不影響。
+ * @param {string} effect_name 音效名稱，必須存在於 SOUND_EFFECT_SCENES
+ * @param {() => void} on_finished 播完或被停止時呼叫一次
+ * @returns {() => void} 提前停止的函式
+ */
+export function start_sound_effect(effect_name, on_finished) {
+  if (!Object.hasOwn(SOUND_EFFECT_SCENES, effect_name)) throw new RangeError(`沒有這個音效：${effect_name}`);
+  const effect_output = open_effect_output(on_finished);
+  effect_output.stop_after(SOUND_EFFECT_SCENES[effect_name](effect_output.audio_context, effect_output.output_node, effect_output.start_time()));
+  return effect_output.stop_effect;
+}
+
+async function load_audio_buffer(audio_context, recording_url) {
+  const http_response = await fetch(recording_url);
+  if (!http_response.ok) throw new Error(`載入實錄音檔失敗：${recording_url}（HTTP ${http_response.status}）`);
+  return audio_context.decodeAudioData(await http_response.arrayBuffer());
+}
+
+/**
+ * 播放一段實錄音檔，播完自動停止；載入中按停止會直接結束，不會在之後才突然出聲。
+ * @param {string} recording_url 同一個網站上的音檔網址（見 recorded_sound_manifest.recording_file_url）
+ * @param {() => void} on_finished 播完、被停止或載入失敗時呼叫一次
+ * @param {(load_error: Error) => void} on_failed 載入或解碼失敗時先呼叫，再呼叫 on_finished
+ * @returns {() => void} 提前停止的函式
+ */
+export function start_recorded_effect(recording_url, on_finished, on_failed) {
+  const effect_output = open_effect_output(on_finished);
+  load_audio_buffer(effect_output.audio_context, recording_url)
+    .then((audio_buffer) => {
+      if (effect_output.is_stopped()) return;
+      const buffer_source = effect_output.audio_context.createBufferSource();
+      buffer_source.buffer = audio_buffer;
+      buffer_source.connect(effect_output.output_node);
+      buffer_source.start(effect_output.start_time());
+      effect_output.stop_after(audio_buffer.duration);
+    })
+    .catch((load_error) => {
+      if (effect_output.is_stopped()) return;
+      on_failed(load_error);
+      effect_output.stop_effect();
+    });
+  return effect_output.stop_effect;
 }
