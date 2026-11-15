@@ -1,0 +1,24 @@
+{
+  "preferences": [
+    {
+      "asset_id": "bicycle_ride",
+      "chosen_version": "recorded",
+      "updated_at": "2026-11-15T12:50:20Z"
+    },
+    {
+      "asset_id": "single_footsteps",
+      "chosen_version": "recorded",
+      "updated_at": "2026-11-15T12:50:46Z"
+    },
+    {
+      "asset_id": "sparrow_chirp",
+      "chosen_version": "synthesized",
+      "updated_at": "2026-11-15T12:02:19Z"
+    },
+    {
+      "asset_id": "tractor_engine",
+      "chosen_version": "recorded",
+      "updated_at": "2026-11-15T12:49:51Z"
+    }
+  ]
+}

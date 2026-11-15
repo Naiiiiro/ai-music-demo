@@ -22,6 +22,7 @@ dev = [
 benchmark-resources = "ai_music_demo.resource_benchmark:main"
 fetch-recorded-sounds = "ai_music_demo.recorded_sound_fetcher:main"
 evaluate-sound-plan = "ai_music_demo.sound_plan_command:main"
+serve-scene-sounds = "ai_music_demo.scene_sound_server:main"
 
 [tool.ruff]
 line-length = 120
