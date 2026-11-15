@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>場景音效試聽</title>
+  <style>
+    :root { --text-color: #1d1d1f; --page-background: #ffffff; --muted-color: #5f6368; --row-border: #e3e3e3;
+      --recorded-background: #fdecea; --recorded-text: #8a1c12; --synthesized-background: #e6f4ea; --synthesized-text: #14532d;
+      --link-color: #0b57d0; --choice-border: #c4c7c5; --choice-selected: #0b57d0; --overridden-color: #9a5b00; }
+    @media (prefers-color-scheme: dark) {
+      :root { --text-color: #e8eaed; --page-background: #17181a; --muted-color: #a8adb4; --row-border: #33363a;
+        --recorded-background: #4a1d18; --recorded-text: #ffb4a8; --synthesized-background: #173a24; --synthesized-text: #a6e3b8;
+        --link-color: #8ab4f8; --choice-border: #5f6368; --choice-selected: #8ab4f8; --overridden-color: #f2b867; }
+    }
+    body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.6;
+      color: var(--text-color); background: var(--page-background); }
+    a { color: var(--link-color); }
+    h2 { margin-top: 2rem; font-size: 1.2rem; }
+    button { font-size: 0.95rem; padding: 0.35rem 0.8rem; }
+    .sound_row { display: grid; grid-template-columns: 11rem 1fr; gap: 0.25rem 1rem; padding: 0.6rem 0; border-top: 1px solid var(--row-border); }
+    .sound_name { font-weight: 600; }
+    .sound_controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+    .sound_detail { grid-column: 2; font-size: 0.85rem; color: var(--muted-color); }
+    .recommendation_badge { display: inline-block; font-size: 0.8rem; padding: 0.1rem 0.5rem; border-radius: 999px; font-weight: 600; }
+    .recommendation_badge[data-version="recorded"] { background: var(--recorded-background); color: var(--recorded-text); }
+    .recommendation_badge[data-version="synthesized"] { background: var(--synthesized-background); color: var(--synthesized-text); }
+    .version_choice { display: inline-flex; border: 1px solid var(--choice-border); border-radius: 6px; overflow: hidden; margin: 0; padding: 0; }
+    .version_choice legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .version_choice label { padding: 0.25rem 0.7rem; cursor: pointer; font-size: 0.9rem; }
+    .version_choice input { position: absolute; opacity: 0; }
+    .version_choice label:has(input:checked) { background: var(--choice-selected); color: var(--page-background); font-weight: 600; }
+    .version_choice label:has(input:focus-visible) { outline: 2px solid var(--choice-selected); outline-offset: -2px; }
+    .overridden_note { color: var(--overridden-color); font-size: 0.8rem; font-weight: 600; }
+    #stop_bar { position: sticky; top: 0; background: var(--page-background); padding: 0.5rem 0; z-index: 1; }
+    @media (max-width: 36rem) { .sound_row { grid-template-columns: 1fr; } .sound_detail { grid-column: 1; } }
+  </style>
+</head>
+<body>
+  <p><a href="./index.html">← 回到演算法音樂示範</a></p>
+  <h1>場景音效試聽</h1>
+  <p>3D 場景評估出的 42 組共用音效素材，每組都能比較「合成」與「實錄」。原則是能合成就合成，動物與人聲這類難以模仿的聲音才建議實錄。
+    合成版在瀏覽器現場計算，不下載音檔；實錄版只在按下按鈕時才載入。兩個版本播放前都會對齊到同樣的響度。</p>
+  <p>「選用」預設是建議的版本；聽完想改就點另一個。用 <code>uv run serve-scene-sounds</code> 開這頁時，選擇會直接寫回 repo 的
+    <code>web/scene_sound_preferences.json</code>；在其他地方開時只記在這個瀏覽器，可以下載偏好檔。</p>
+  <p id="catalog_summary"></p>
+  <p id="preference_mode"></p>
+  <div id="stop_bar"><button id="stop_button" disabled>停止</button> <span id="playback_status" role="status"></span></div>
+  <div id="catalog_sections"></div>
+  <script type="module">
+    import { CATALOG_GROUPS, SCENE_SOUND_CATALOG } from "./scene_sound_catalog.js";
+    import { start_recorded_effect, start_rendered_effect, start_sound_effect } from "./sound_effects.js";
+    import { parse_recorded_sound_manifest, recording_file_url } from "./recorded_sound_manifest.js";
+    import {
+      SCENE_PREFERENCE_API_PATH, SCENE_PREFERENCE_FILE_PATH, parse_preference_book, selected_version_of, summarize_selection,
+    } from "./scene_sound_preferences.js";
+
+    const SCENE_RECORDING_MANIFEST_PATH = "./scene_recorded_sounds.json";
+    const SCENE_RECORDING_DIRECTORY = "./scene_recorded_sounds";
+    const LOCAL_PREFERENCE_STORAGE_KEY = "scene_sound_preferences";
+    const VERSION_LABELS = Object.freeze({ synthesized: "合成", recorded: "實錄" });
+    const KNOWN_ASSET_IDS = SCENE_SOUND_CATALOG.map((catalog_entry) => catalog_entry.asset_id);
+
+    const catalog_sections = document.getElementById("catalog_sections");
+    const stop_button = document.getElementById("stop_button");
+    const playback_status = document.getElementById("playback_status");
+    const catalog_summary = document.getElementById("catalog_summary");
+    const preference_mode = document.getElementById("preference_mode");
+    let stop_current_sound = null;
+    let recordings_by_asset = {};
+    let preferences_by_asset = {};
+    let can_write_repository = false;
+
+    const format_kibibytes = (byte_count) => `${(byte_count / 1024).toFixed(1)} KiB`;
+    const current_utc_timestamp = () => new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+
+    // ── 播放 ─────────────────────────────────────────────
+
+    function set_playing(is_playing) {
+      document.querySelectorAll(".play_button").forEach((play_button) => {
+        play_button.disabled = is_playing || (play_button.dataset.version === "recorded" && !Object.hasOwn(recordings_by_asset, play_button.dataset.asset));
+      });
+      stop_button.disabled = !is_playing;
+    }
+
+    function on_sound_finished() {
+      stop_current_sound = null;
+      set_playing(false);
+    }
+
+    function show_playback_error(playback_error) {
+      playback_status.textContent = `播放失敗：${playback_error.message}`;
+    }
+
+    function start_version(catalog_entry, version_name) {
+      if (version_name === "recorded") {
+        const recording_url = recording_file_url(recordings_by_asset[catalog_entry.asset_id], SCENE_RECORDING_DIRECTORY);
+        return start_recorded_effect(recording_url, on_sound_finished, (load_error) => {
+          playback_status.textContent = `${load_error.message}。本機請先執行 uv run fetch-recorded-sounds --manifest web/scene_recorded_sounds.json --output-directory web/scene_recorded_sounds。`;
+        });
+      }
+      const { render_samples, existing_effect_name, level_offset_decibels } = catalog_entry.synthesis_source;
+      return existing_effect_name
+        ? start_sound_effect(existing_effect_name, on_sound_finished, show_playback_error)
+        : start_rendered_effect(render_samples, on_sound_finished, level_offset_decibels);
+    }
+
+    // ── 偏好 ─────────────────────────────────────────────
+
+    function read_local_preferences() {
+      try {
+        const stored_text = localStorage.getItem(LOCAL_PREFERENCE_STORAGE_KEY);
+        return stored_text ? parse_preference_book(JSON.parse(stored_text), KNOWN_ASSET_IDS) : null;
+      } catch (storage_error) {
+        console.warn("忽略這個瀏覽器裡無法讀取的偏好紀錄", storage_error);
+        return null;
+      }
+    }
+
+    function preference_book_from_map() {
+      return { preferences: Object.values(preferences_by_asset).sort((first_item, second_item) => first_item.asset_id.localeCompare(second_item.asset_id)) };
+    }
+
+    function write_local_preferences() {
+      try {
+        localStorage.setItem(LOCAL_PREFERENCE_STORAGE_KEY, JSON.stringify(preference_book_from_map()));
+      } catch (storage_error) {
+        playback_status.textContent = `這個瀏覽器無法保存選擇（${storage_error.message}），請用「下載偏好檔」。`;
+      }
+    }
+
+    async function save_preference(asset_id, chosen_version) {
+      preferences_by_asset = { ...preferences_by_asset, [asset_id]: { asset_id, chosen_version, updated_at: current_utc_timestamp() } };
+      if (!can_write_repository) {
+        write_local_preferences();
+        return "已記在這個瀏覽器";
+      }
+      const http_response = await fetch(SCENE_PREFERENCE_API_PATH, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ asset_id, chosen_version }),
+      });
+      const response_body = await http_response.json();
+      if (!http_response.ok) throw new Error(response_body.error ?? `HTTP ${http_response.status}`);
+      preferences_by_asset = parse_preference_book(response_body, KNOWN_ASSET_IDS);
+      return "已寫回 repo";
+    }
+
+    function download_preference_file() {
+      const preference_blob = new Blob([JSON.stringify(preference_book_from_map(), null, 2) + "\n"], { type: "application/json" });
+      const download_link = document.createElement("a");
+      download_link.href = URL.createObjectURL(preference_blob);
+      download_link.download = "scene_sound_preferences.json";
+      download_link.click();
+      URL.revokeObjectURL(download_link.href);
+    }
+
+    // ── 畫面 ─────────────────────────────────────────────
+
+    function create_element(tag_name, class_name, text_content = "") {
+      const new_element = document.createElement(tag_name);
+      if (class_name) new_element.className = class_name;
+      new_element.textContent = text_content;
+      return new_element;
+    }
+
+    function create_play_button(catalog_entry, version_name) {
+      const play_button = create_element("button", "play_button", `▶ ${VERSION_LABELS[version_name]}`);
+      Object.assign(play_button.dataset, { asset: catalog_entry.asset_id, version: version_name });
+      play_button.addEventListener("click", () => {
+        playback_status.textContent = `播放中：${catalog_entry.display_name}（${VERSION_LABELS[version_name]}）`;
+        stop_current_sound = start_version(catalog_entry, version_name);
+        set_playing(true);
+      });
+      return play_button;
+    }
+
+    function update_override_note(catalog_entry) {
+      const override_note = document.getElementById(`override_${catalog_entry.asset_id}`);
+      const is_overridden = selected_version_of(catalog_entry, preferences_by_asset) !== catalog_entry.recommended_version;
+      override_note.textContent = is_overridden ? "已改選" : "";
+    }
+
+    function create_version_choice(catalog_entry) {
+      const version_choice = create_element("fieldset", "version_choice");
+      version_choice.append(create_element("legend", "", `${catalog_entry.display_name}選用的版本`));
+      for (const version_name of Object.keys(VERSION_LABELS)) {
+        const choice_label = create_element("label", "");
+        const choice_input = document.createElement("input");
+        Object.assign(choice_input, { type: "radio", name: `choice_${catalog_entry.asset_id}`, value: version_name });
+        choice_input.addEventListener("change", () => on_version_chosen(catalog_entry, version_name));
+        const recommended_suffix = catalog_entry.recommended_version === version_name ? "（建議）" : "";
+        choice_label.append(choice_input, `選用${VERSION_LABELS[version_name]}${recommended_suffix}`);
+        version_choice.append(choice_label);
+      }
+      return version_choice;
+    }
+
+    function refresh_choices() {
+      for (const catalog_entry of SCENE_SOUND_CATALOG) {
+        const chosen_version = selected_version_of(catalog_entry, preferences_by_asset);
+        document.querySelector(`input[name="choice_${catalog_entry.asset_id}"][value="${chosen_version}"]`).checked = true;
+        update_override_note(catalog_entry);
+      }
+      render_summary();
+    }
+
+    function on_version_chosen(catalog_entry, version_name) {
+      save_preference(catalog_entry.asset_id, version_name)
+        .then((save_message) => { playback_status.textContent = `${catalog_entry.display_name}改為選用${VERSION_LABELS[version_name]}，${save_message}`; })
+        .catch((save_error) => { playback_status.textContent = `寫回 repo 失敗：${save_error.message}`; })
+        .finally(refresh_choices);
+    }
+
+    function render_catalog_row(catalog_entry) {
+      const sound_row = create_element("div", "sound_row");
+      sound_row.append(create_element("div", "sound_name", catalog_entry.display_name));
+      const sound_controls = create_element("div", "sound_controls");
+      const recommendation_badge = create_element("span", "recommendation_badge", `建議${VERSION_LABELS[catalog_entry.recommended_version]}`);
+      recommendation_badge.dataset.version = catalog_entry.recommended_version;
+      const override_note = create_element("span", "overridden_note");
+      override_note.id = `override_${catalog_entry.asset_id}`;
+      sound_controls.append(recommendation_badge, create_play_button(catalog_entry, "synthesized"), create_play_button(catalog_entry, "recorded"),
+        create_version_choice(catalog_entry), override_note);
+      const sound_detail = create_element("div", "sound_detail", catalog_entry.recommendation_reason);
+      sound_detail.id = `detail_${catalog_entry.asset_id}`;
+      sound_row.append(sound_controls, sound_detail);
+      return sound_row;
+    }
+
+    function append_recording_credit(recording) {
+      const sound_detail = document.getElementById(`detail_${recording.effect_name}`);
+      sound_detail.append(create_element("br", ""), "實錄：");
+      const source_link = create_element("a", "", `「${recording.title}」by ${recording.author}`);
+      source_link.href = recording.source_page_url;
+      source_link.rel = "noopener";
+      sound_detail.append(source_link, `（Freesound，${recording.license_name}，${format_kibibytes(recording.byte_size)}）`);
+    }
+
+    function render_summary() {
+      const selection_summary = summarize_selection(SCENE_SOUND_CATALOG, preferences_by_asset, recordings_by_asset);
+      catalog_summary.textContent = `共 ${SCENE_SOUND_CATALOG.length} 組：目前選用合成 ${selection_summary.synthesized_count} 組、實錄 ${selection_summary.recorded_count} 組`
+        + `（其中 ${selection_summary.overridden_count} 組改選了非建議的版本）。`
+        + (Object.keys(recordings_by_asset).length > 0 ? `照目前選用上線時，實錄音檔合計 ${format_kibibytes(selection_summary.recorded_bytes)}。` : "");
+    }
+
+    function render_preference_mode() {
+      preference_mode.replaceChildren();
+      if (can_write_repository) {
+        preference_mode.textContent = "選擇會寫回 repo（web/scene_sound_preferences.json），之後照一般流程開 PR。";
+        return;
+      }
+      const download_button = create_element("button", "", "下載偏好檔");
+      download_button.addEventListener("click", download_preference_file);
+      preference_mode.append("這裡無法寫回 repo，選擇只記在這個瀏覽器。", download_button);
+    }
+
+    // ── 啟動 ─────────────────────────────────────────────
+
+    async function fetch_json(json_path) {
+      const http_response = await fetch(json_path, { cache: "no-store" });
+      if (!http_response.ok) throw new Error(`載入 ${json_path} 失敗（HTTP ${http_response.status}）`);
+      return http_response.json();
+    }
+
+    async function load_preferences() {
+      try {
+        preferences_by_asset = parse_preference_book(await fetch_json(SCENE_PREFERENCE_API_PATH), KNOWN_ASSET_IDS);
+        can_write_repository = true;
+        return;
+      } catch (api_error) {
+        console.info("沒有偏好寫回 API，改讀版控裡的偏好檔", api_error.message);
+      }
+      try {
+        preferences_by_asset = parse_preference_book(await fetch_json(SCENE_PREFERENCE_FILE_PATH), KNOWN_ASSET_IDS);
+      } catch (file_error) {
+        playback_status.textContent = `偏好檔無法使用，先照建議選用：${file_error.message}`;
+      }
+      preferences_by_asset = { ...preferences_by_asset, ...(read_local_preferences() ?? {}) };
+    }
+
+    async function load_recordings() {
+      try {
+        recordings_by_asset = parse_recorded_sound_manifest(await fetch_json(SCENE_RECORDING_MANIFEST_PATH), KNOWN_ASSET_IDS);
+        Object.values(recordings_by_asset).forEach(append_recording_credit);
+      } catch (manifest_error) {
+        playback_status.textContent = `實錄版本無法使用：${manifest_error.message}`;
+      }
+    }
+
+    for (const catalog_group of CATALOG_GROUPS) {
+      catalog_sections.append(create_element("h2", "", catalog_group.group_title));
+      SCENE_SOUND_CATALOG.filter((catalog_entry) => catalog_entry.group_id === catalog_group.group_id)
+        .forEach((catalog_entry) => catalog_sections.append(render_catalog_row(catalog_entry)));
+    }
+    stop_button.addEventListener("click", () => stop_current_sound?.());
+    refresh_choices();
+    set_playing(false);
+    Promise.all([load_preferences(), load_recordings()]).then(() => {
+      render_preference_mode();
+      refresh_choices();
+      set_playing(stop_current_sound !== null);
+    });
+  </script>
+</body>
+</html>
