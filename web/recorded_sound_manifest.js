@@ -26,7 +26,11 @@ function parse_recording(raw_recording, recording_index) {
   for (const field_name of LINK_FIELDS) {
     if (!raw_recording[field_name].startsWith("https://")) throw new TypeError(`${location_prefix}.${field_name} 必須是 https 網址`);
   }
-  return Object.freeze(Object.fromEntries(REQUIRED_TEXT_FIELDS.map((field_name) => [field_name, raw_recording[field_name]])));
+  if (!Number.isInteger(raw_recording.byte_size) || raw_recording.byte_size <= 0) throw new TypeError(`${location_prefix}.byte_size 必須是正整數`);
+  return Object.freeze({
+    ...Object.fromEntries(REQUIRED_TEXT_FIELDS.map((field_name) => [field_name, raw_recording[field_name]])),
+    byte_size: raw_recording.byte_size,
+  });
 }
 
 /**
@@ -50,8 +54,9 @@ export function parse_recorded_sound_manifest(raw_manifest, known_effect_names) 
 /**
  * 實錄音檔在網站上的相對網址（與網頁同一個網站，不連第三方）。
  * @param {{asset_file_name: string}} recording
+ * @param {string} [recording_directory=RECORDED_SOUND_DIRECTORY] 音檔所在的資料夾（場景試聽頁用自己的資料夾）
  * @returns {string}
  */
-export function recording_file_url(recording) {
-  return `${RECORDED_SOUND_DIRECTORY}/${recording.asset_file_name}`;
+export function recording_file_url(recording, recording_directory = RECORDED_SOUND_DIRECTORY) {
+  return `${recording_directory}/${recording.asset_file_name}`;
 }
