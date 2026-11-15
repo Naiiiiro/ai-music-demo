@@ -24,7 +24,7 @@
 
 ## 音效（與音樂分開）
 
-網頁另有獨立的音效區，用自己的 AudioContext 播放，不經過音樂混音台。每個音效有「合成」與「實錄」兩個按鈕，兩者走同一條輸出鏈，音量可以公平對照。下表是合成版；實錄版見〈實錄音效〉。訊號與控制曲線在 `web/effect_signals.js`（純計算，可在 Node 測試），接濾波器與排程在 `web/sound_effects.js`。
+網頁另有獨立的音效區，用自己的 AudioContext 播放，不經過音樂混音台。每個音效有「合成」與「實錄」兩個按鈕，兩者走同一條輸出鏈；播放前先量出有聲部分的響度（EBU R128 的簡化版：100 ms 小窗、-70 dBFS 絕對門檻加 -10 dB 相對門檻，見 `web/loudness_matching.js`），再對齊到 -20 dBFS，音量才能公平對照。下表是合成版；實錄版見〈實錄音效〉。訊號與控制曲線在 `web/effect_signals.js`（純計算，可在 Node 測試），接濾波器與排程在 `web/sound_effects.js`。
 
 自然的聲音需要寬頻雜訊（輪胎、排氣、氣音）。這裡不用亂數，改用 31 位元 LFSR（線性回授移位暫存器，老遊戲機雜訊聲道的做法）：固定起始狀態、純位元運算，每次輸出都一樣（`signal_generators.js` 的 `generate_noise_samples`）。
 
@@ -59,6 +59,27 @@ web/recorded_sounds/（被 .gitignore 排除）
 部署由 `.github/workflows/pages.yml` 執行：PR 只跑測試；推送到 `main` 時測試通過後下載音檔並發布到 GitHub Pages。
 
 更換音檔：上傳新檔到新的 Release（例如 `sound-assets-v2`），再更新 `recorded_sounds.json` 的 `release_base_url`、`sha256`、`byte_size`。舊 Release 保留，舊版本的部署才拿得到原本的檔案。
+
+## 場景音效試聽
+
+`web/scene_sounds.html` 列出〈場景音效規劃〉評估出的 42 組素材，每組都能比較合成與實錄，並標註建議：能合成就合成，動物與人聲才建議實錄（29 組合成、13 組實錄）。
+
+| 部分 | 位置 |
+|---|---|
+| 清單與建議 | `web/scene_sound_catalog.js`（素材 id 與 `sound_rules.json` 一致，測試會檢查） |
+| 合成配方（39 組，另 3 組沿用既有音效） | `web/scene_recipes_machinery.js`、`scene_recipes_movement.js`、`scene_recipes_creatures.js`，元件在 `web/synthesis_primitives.js` |
+| 實錄音檔（42 個，Freesound CC0） | Release `scene-assets-v1`（與場景 HTML 同一個 Release，只新增、不覆蓋），清單 `web/scene_recorded_sounds.json`，下載到 `web/scene_recorded_sounds/` |
+| 選用偏好 | `web/scene_sound_preferences.json`（只記使用者點選過的素材；沒有紀錄的沿用建議） |
+
+每組有「選用合成／選用實錄」兩個選項，預設是建議的版本。用本機伺服器開頁面時，點選會立即寫回偏好檔，之後照一般流程開 PR：
+
+```bash
+uv run fetch-recorded-sounds --manifest web/scene_recorded_sounds.json --output-directory web/scene_recorded_sounds
+uv run serve-scene-sounds        # 開 http://127.0.0.1:8765/scene_sounds.html
+```
+
+- 伺服器只監聽 127.0.0.1；寫入 API 只接受 `application/json` 與本機 Origin，其他網站無法透過你的瀏覽器改檔。
+- 在 GitHub Pages 上沒有寫入 API：選擇只記在該瀏覽器，可按「下載偏好檔」取得同格式的 JSON。
 
 ## 使用方式
 

@@ -20,12 +20,24 @@
 | `web/browser_composer.js` | 領域邏輯（瀏覽器端，純計算） | `compose_bar`、`MELODY_PHRASES`、`euclidean_rhythm` | 無 |
 | `web/signal_generators.js` | 領域邏輯（瀏覽器端，純計算） | `generate_inharmonic_samples`、`METALLIC_PARTIAL_FREQUENCIES`、`generate_noise_samples`、`create_noise_register`、`generate_impulse_samples`、`generate_pluck_samples` | 無 |
 | `web/effect_signals.js` | 領域邏輯（瀏覽器端，純計算） | `generate_engine_pulse_samples`、`car_pass_state`、`generate_meow_source_samples`、`smooth_interpolate`、`sample_control_curve`、`TRAFFIC_PASSES` | signal_generators |
-| `web/recorded_sound_manifest.js` | 領域邏輯（瀏覽器端，純計算） | `parse_recorded_sound_manifest`、`recording_file_url`、`RECORDED_SOUND_MANIFEST_PATH` | 無 |
+| `web/recorded_sound_manifest.js` | 領域邏輯（瀏覽器端，純計算） | `parse_recorded_sound_manifest`（含 `byte_size`）、`recording_file_url`（可指定資料夾）、`RECORDED_SOUND_MANIFEST_PATH` | 無 |
 | `web/instrument_voices.js` | 基礎設施（Web Audio 音色） | `INSTRUMENT_VOICES`、`schedule_instrument_note` | browser_composer（只用 `midi_to_frequency`）、signal_generators |
 | `web/mixing_console.js` | 基礎設施（Web Audio 混音） | `create_mixing_console`、`decibels_to_gain`、`INSTRUMENT_SEND_LEVELS` | signal_generators |
 | `web/browser_player.js` | 基礎設施（Web Audio 排程） | `start_endless_playback`、`run_offline_benchmark` | browser_composer、instrument_voices、mixing_console |
-| `web/sound_effects.js` | 基礎設施（Web Audio 音效，與音樂分開） | `start_sound_effect`、`start_recorded_effect`、`SOUND_EFFECT_SCENES` | effect_signals、signal_generators |
+| `web/sound_effects.js` | 基礎設施（Web Audio 音效，與音樂分開；播放前對齊響度） | `start_sound_effect`、`start_rendered_effect`、`start_recorded_effect`、`SOUND_EFFECT_SCENES`、`SOUND_EFFECT_SCENE_SECONDS` | effect_signals、signal_generators、loudness_matching |
 | `web/index.html` | 介面入口 | — | browser_player、sound_effects、recorded_sound_manifest |
+| `scene_sound_preferences.py` | 領域邏輯（純計算） | `SoundPreference`、`PreferenceUpdate`、`PreferenceBook`、`parse_preference_book`、`parse_preference_update`、`apply_preference_update`、`preference_book_to_json`、`PreferenceFormatError` | 無 |
+| `scene_sound_server.py` | 命令列入口（本機 HTTP 伺服器） | `main`（`serve-scene-sounds`）、`PreferenceStore`、`build_server`、`load_known_asset_ids`、`read_json_request` | scene_sound_preferences、sound_plan_model |
+| `web/loudness_matching.js` | 領域邏輯（瀏覽器端，純計算） | `measure_gated_loudness`、`loudness_matching_gain`、`TARGET_LOUDNESS_RMS`、`MAXIMUM_MATCHING_GAIN` | 無 |
+| `web/synthesis_primitives.js` | 領域邏輯（瀏覽器端，純計算） | `create_noise_samples`、`create_oscillator_samples`、`apply_filter`、`apply_filter_chain`、`apply_envelope`、`smooth_curve`、`percussive_envelope`、`irregular_swell`、`golden_spread`、`mix_into`、`create_struck_resonance`、`create_voice_source`、`apply_formants`、`finish_samples`、`create_silent_samples` | effect_signals（只用 `smooth_interpolate`）、signal_generators |
+| `web/scene_recipes_machinery.js` | 領域邏輯（瀏覽器端，純計算） | 水聲、機械、鐘聲號誌的 `render_*`、`render_engine_firing` | synthesis_primitives |
+| `web/scene_recipes_movement.js` | 領域邏輯（瀏覽器端，純計算） | 交通工具與動作聲的 `render_*` | synthesis_primitives、scene_recipes_machinery（只用 `render_engine_firing`） |
+| `web/scene_recipes_creatures.js` | 領域邏輯（瀏覽器端，純計算） | 動物與人聲的 `render_*` | synthesis_primitives |
+| `web/scene_sound_catalog.js` | 資料（試聽清單與建議） | `SCENE_SOUND_CATALOG`、`CATALOG_GROUPS`、`RECOMMENDED_VERSIONS` | 三個 scene_recipes 模組 |
+| `web/scene_sound_preferences.js` | 領域邏輯（瀏覽器端，純計算） | `parse_preference_book`、`selected_version_of`、`summarize_selection`、`SCENE_PREFERENCE_FILE_PATH`、`SCENE_PREFERENCE_API_PATH` | 無 |
+| `web/scene_sounds.html` | 介面入口 | — | scene_sound_catalog、sound_effects、recorded_sound_manifest、scene_sound_preferences |
+| `web/scene_recorded_sounds.json` | 資料（場景試聽的實錄來源清單） | — | 由 recorded_sound_fetcher 與 scene_sounds.html 讀取 |
+| `web/scene_sound_preferences.json` | 資料（使用者選用偏好） | — | 由 scene_sound_server 寫入，scene_sounds.html 讀取 |
 | `sound_plans/*/sound_rules.json` | 資料（音效規劃規則：共用素材、邊界決議） | — | 由 sound_plan_command 讀取 |
 | `sound_plans/*/scene_source.json` | 資料（場景 HTML 的 Release 位置與 SHA-256） | — | 由 sound_plan_command 讀取 |
 | `web/recorded_sounds.json` | 資料（實錄音檔來源清單） | — | 由 recorded_sound_fetcher 與 recorded_sound_manifest.js 讀取 |
