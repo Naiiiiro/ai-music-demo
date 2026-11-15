@@ -262,7 +262,7 @@ def test_run_evaluation_writes_report_and_snapshot(tmp_path: Path) -> None:
 
 
 def test_repository_plan_keeps_reviewed_counts() -> None:
-    """回歸：目前這版 HTML 評估出 129 個需設計組件、44 組共用素材，且所有規則都有效。"""
+    """回歸：目前這版 HTML 評估出 128 個需設計組件、42 組共用素材（聯軸器制動器改為不設計，齒輪箱併入傳動與發電聲），且所有規則都有效。"""
     snapshot = parse_component_snapshot(
         json.loads((REPOSITORY_PLAN_DIRECTORY / "component_snapshot.json").read_text(encoding="utf-8"))
     )
@@ -273,6 +273,6 @@ def test_repository_plan_keeps_reviewed_counts() -> None:
     evaluation = evaluate_sound_plan(snapshot, rules, None)
 
     assert len(snapshot.components) == 1211
-    assert len(evaluation.designed_components) == 129
-    assert len(rules.sound_assets) == 44
+    assert len(evaluation.designed_components) == 128
+    assert len(rules.sound_assets) == 42
     assert evaluation.rule_warnings == ()
