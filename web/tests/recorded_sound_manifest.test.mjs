@@ -19,6 +19,7 @@ function build_raw_recording(field_overrides = {}) {
     license_name: "CC0 1.0",
     license_url: "https://creativecommons.org/publicdomain/zero/1.0/",
     source_page_url: "https://freesound.org/people/someone/sounds/1/",
+    byte_size: 36113,
     ...field_overrides,
   };
 }
@@ -32,6 +33,22 @@ test("repository manifest has one recording for every synthesized effect", () =>
 test("recording file url stays on the same site", () => {
   assert.equal(recording_file_url({ asset_file_name: "cat_meow.mp3" }), "./recorded_sounds/cat_meow.mp3");
 });
+
+test("recording file url can point to another directory on the same site", () => {
+  assert.equal(recording_file_url({ asset_file_name: "dog_bark.mp3" }, "./scene_recorded_sounds"), "./scene_recorded_sounds/dog_bark.mp3");
+});
+
+test("parsed recording keeps the byte size", () => {
+  const recordings_by_effect = parse_recorded_sound_manifest({ recordings: [build_raw_recording()] }, KNOWN_EFFECT_NAMES);
+  assert.equal(recordings_by_effect.cat.byte_size, 36113);
+});
+
+for (const invalid_byte_size of [0, -1, 1.5, "36113", undefined]) {
+  test(`byte size ${String(invalid_byte_size)} is rejected`, () => {
+    const raw_manifest = { recordings: [build_raw_recording({ byte_size: invalid_byte_size })] };
+    assert.throws(() => parse_recorded_sound_manifest(raw_manifest, KNOWN_EFFECT_NAMES), TypeError);
+  });
+}
 
 test("unknown effect name is rejected", () => {
   const raw_manifest = { recordings: [build_raw_recording({ effect_name: "dog" })] };

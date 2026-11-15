@@ -3,9 +3,7 @@
  "judgement_principle": "組件在場景中會動、會運轉，或現實中有持續／週期性聲源（流水、鐘聲、牲畜、機械嗡鳴）就建議設計；靜態物件、範圍地塊、聲音已由其他組件負責就不設計。同類組件盡量共用同一組音效素材。",
  "sound_assets": [
   {"asset_id": "screw_water_churn", "chinese_name": "螺旋攪水聲", "sound_description": "螺旋葉片攪水、低頻轉動", "component_patterns": ["screw"]},
-  {"asset_id": "brake_clank", "chinese_name": "制動器咬合聲", "sound_description": "聯軸器制動器作動的金屬咬合", "component_patterns": ["coupling"]},
-  {"asset_id": "gearbox_whine", "chinese_name": "齒輪箱嘯聲", "sound_description": "增速齒輪箱高頻嘯聲", "component_patterns": ["gearbox"]},
-  {"asset_id": "electrical_hum", "chinese_name": "電機嗡鳴", "sound_description": "60 Hz 交流電嗡鳴（發電機、變壓器）", "component_patterns": ["generator", "transformer"]},
+  {"asset_id": "drivetrain_generator_hum", "chinese_name": "傳動與發電聲", "sound_description": "增速齒輪箱的齒輪咬合聲，與發電機、變壓器的交流嗡鳴（同在發電廠區、同時運轉）", "component_patterns": ["gearbox", "generator", "transformer"]},
   {"asset_id": "flowing_water", "chinese_name": "渠道流水聲", "sound_description": "平穩的渠道流水", "component_patterns": ["inlet", "outfall", "canalUp", "canalDown"]},
   {"asset_id": "tailrace_splash", "chinese_name": "出水翻騰聲", "sound_description": "尾水池出水翻騰、潑濺", "component_patterns": ["tailrace"]},
   {"asset_id": "sea_waves", "chinese_name": "海浪聲", "sound_description": "海浪拍岸環境音", "component_patterns": ["sea"]},
@@ -70,6 +68,7 @@
   {"component_id": "army_helipads", "reason": "說明裡沒有直升機起降動態", "decided_on": "2026-11-15"},
   {"component_id": "neurothemis", "reason": "蜻蜓振翅聲太小", "decided_on": "2026-11-15"},
   {"component_id": "orthetrum", "reason": "蜻蜓振翅聲太小", "decided_on": "2026-11-15"},
-  {"component_id": "ischnura", "reason": "豆娘振翅聲太小", "decided_on": "2026-11-15"}
+  {"component_id": "ischnura", "reason": "豆娘振翅聲太小", "decided_on": "2026-11-15"},
+  {"component_id": "coupling", "reason": "失效安全型制動器只在脫離電網時咬合一次，場景沒有這類事件；平常的轉動聲由傳動與發電聲負責", "decided_on": "2026-11-15"}
  ]
 }

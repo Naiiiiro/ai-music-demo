@@ -1,7 +1,8 @@
 /**
  * 音效（Web Audio）：汽車引擎、馬路車流、貓叫。與音樂完全分開：自己的 AudioContext、自己的輸出鏈，
  * 不經過 mixing_console。合成版的訊號與控制曲線由 effect_signals 算好，這裡只負責接上濾波器並排進時間軸，
- * 不用亂數，每次播放都一樣。實錄版從同一個網站載入部署時下載的音檔，走同一條輸出鏈，音量才能公平對照。
+ * 不用亂數，每次播放都一樣。實錄版從同一個網站載入部署時下載的音檔，走同一條輸出鏈。
+ * 每個版本播放前都先量出有聲部分的響度，再用 loudness_matching 的增益對齊到同一個目標，比較時才不會被音量差誤導。
  */
 import {
   ENGINE_RPM_POINTS,
@@ -20,6 +21,7 @@ import {
   smooth_interpolate,
   traffic_ambience_level,
 } from "./effect_signals.js";
+import { loudness_matching_gain } from "./loudness_matching.js";
 import { generate_noise_samples } from "./signal_generators.js";
 
 const EFFECTS_VOLUME_GAIN = 0.7;
@@ -169,6 +171,15 @@ export const SOUND_EFFECT_SCENES = Object.freeze({
   cat: schedule_meow_scene,
 });
 
+/** 各場景的長度（秒）；離線算出整段取樣時，要先知道緩衝區要開多長。 */
+export const SOUND_EFFECT_SCENE_SECONDS = Object.freeze({
+  engine: ENGINE_RPM_POINTS[ENGINE_RPM_POINTS.length - 1].time_seconds,
+  traffic: TRAFFIC_SCENE_SECONDS,
+  cat: MEOW_SECONDS,
+});
+
+const OFFLINE_RENDER_CHANNEL_COUNT = 2;
+
 /**
  * 開一條音效輸出鏈（自己的 AudioContext → 音量 → 保護用壓縮器），並提供停止與自動停止的控制。
  * @param {() => void} on_finished 播完或被停止時呼叫一次
@@ -197,16 +208,66 @@ function open_effect_output(on_finished) {
   };
 }
 
+function buffer_channel_list(audio_buffer) {
+  return Array.from({ length: audio_buffer.numberOfChannels }, (_, channel_index) => audio_buffer.getChannelData(channel_index));
+}
+
+/** 量出整段的響度、套上對齊增益（再加上 level_offset_decibels）後開始播放，播完自動停止。 */
+function play_loudness_matched_buffer(effect_output, audio_buffer, level_offset_decibels = 0) {
+  const matching_gain = loudness_matching_gain(buffer_channel_list(audio_buffer), audio_buffer.sampleRate) * 10 ** (level_offset_decibels / 20);
+  const buffer_source = effect_output.audio_context.createBufferSource();
+  buffer_source.buffer = audio_buffer;
+  buffer_source.connect(create_gain(effect_output.audio_context, matching_gain)).connect(effect_output.output_node);
+  buffer_source.start(effect_output.start_time());
+  effect_output.stop_after(audio_buffer.duration);
+}
+
+/** 用 OfflineAudioContext 把合成場景整段算成 AudioBuffer，才能在播放前量響度。 */
+function render_scene_buffer(effect_name, sample_rate) {
+  const offline_context = new OfflineAudioContext(OFFLINE_RENDER_CHANNEL_COUNT,
+    Math.ceil(SOUND_EFFECT_SCENE_SECONDS[effect_name] * sample_rate), sample_rate);
+  SOUND_EFFECT_SCENES[effect_name](offline_context, offline_context.destination, 0);
+  return offline_context.startRendering();
+}
+
+function report_failure(effect_output, on_failed) {
+  return (playback_error) => {
+    if (effect_output.is_stopped()) return;
+    on_failed(playback_error);
+    effect_output.stop_effect();
+  };
+}
+
 /**
- * 播放一段合成音效，播完自動停止。音效有自己的 AudioContext，與音樂播放互不影響。
+ * 播放一段合成音效（先離線算好、對齊音量），播完自動停止。音效有自己的 AudioContext，與音樂播放互不影響。
  * @param {string} effect_name 音效名稱，必須存在於 SOUND_EFFECT_SCENES
  * @param {() => void} on_finished 播完或被停止時呼叫一次
+ * @param {(render_error: Error) => void} [on_failed] 離線合成失敗時先呼叫，再呼叫 on_finished
  * @returns {() => void} 提前停止的函式
  */
-export function start_sound_effect(effect_name, on_finished) {
+export function start_sound_effect(effect_name, on_finished, on_failed = console.error) {
   if (!Object.hasOwn(SOUND_EFFECT_SCENES, effect_name)) throw new RangeError(`沒有這個音效：${effect_name}`);
   const effect_output = open_effect_output(on_finished);
-  effect_output.stop_after(SOUND_EFFECT_SCENES[effect_name](effect_output.audio_context, effect_output.output_node, effect_output.start_time()));
+  render_scene_buffer(effect_name, effect_output.audio_context.sampleRate)
+    .then((audio_buffer) => { if (!effect_output.is_stopped()) play_loudness_matched_buffer(effect_output, audio_buffer); })
+    .catch(report_failure(effect_output, on_failed));
+  return effect_output.stop_effect;
+}
+
+/**
+ * 播放一段已算好的合成取樣（例如 scene_sound_catalog 的配方），對齊音量後播放，播完自動停止。
+ * 取樣在 AudioContext 建立後依它的取樣率現場計算，所以不需要下載任何音檔。
+ * @param {(sample_rate: number) => Float32Array} render_samples 吃取樣率、回傳單聲道取樣的純函式
+ * @param {() => void} on_finished 播完或被停止時呼叫一次
+ * @param {number} [level_offset_decibels=0] 對齊響度之後再加減的分貝數
+ * @returns {() => void} 提前停止的函式
+ */
+export function start_rendered_effect(render_samples, on_finished, level_offset_decibels = 0) {
+  const effect_output = open_effect_output(on_finished);
+  const rendered_samples = render_samples(effect_output.audio_context.sampleRate);
+  const audio_buffer = effect_output.audio_context.createBuffer(1, rendered_samples.length, effect_output.audio_context.sampleRate);
+  audio_buffer.getChannelData(0).set(rendered_samples);
+  play_loudness_matched_buffer(effect_output, audio_buffer, level_offset_decibels);
   return effect_output.stop_effect;
 }
 
@@ -217,7 +278,7 @@ async function load_audio_buffer(audio_context, recording_url) {
 }
 
 /**
- * 播放一段實錄音檔，播完自動停止；載入中按停止會直接結束，不會在之後才突然出聲。
+ * 播放一段實錄音檔（對齊音量），播完自動停止；載入中按停止會直接結束，不會在之後才突然出聲。
  * @param {string} recording_url 同一個網站上的音檔網址（見 recorded_sound_manifest.recording_file_url）
  * @param {() => void} on_finished 播完、被停止或載入失敗時呼叫一次
  * @param {(load_error: Error) => void} on_failed 載入或解碼失敗時先呼叫，再呼叫 on_finished
@@ -226,18 +287,7 @@ async function load_audio_buffer(audio_context, recording_url) {
 export function start_recorded_effect(recording_url, on_finished, on_failed) {
   const effect_output = open_effect_output(on_finished);
   load_audio_buffer(effect_output.audio_context, recording_url)
-    .then((audio_buffer) => {
-      if (effect_output.is_stopped()) return;
-      const buffer_source = effect_output.audio_context.createBufferSource();
-      buffer_source.buffer = audio_buffer;
-      buffer_source.connect(effect_output.output_node);
-      buffer_source.start(effect_output.start_time());
-      effect_output.stop_after(audio_buffer.duration);
-    })
-    .catch((load_error) => {
-      if (effect_output.is_stopped()) return;
-      on_failed(load_error);
-      effect_output.stop_effect();
-    });
+    .then((audio_buffer) => { if (!effect_output.is_stopped()) play_loudness_matched_buffer(effect_output, audio_buffer); })
+    .catch(report_failure(effect_output, on_failed));
   return effect_output.stop_effect;
 }
