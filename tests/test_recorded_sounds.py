@@ -23,6 +23,8 @@ from ai_music_demo.recorded_sound_manifest import (
 )
 
 REPOSITORY_MANIFEST_PATH: Path = Path(__file__).resolve().parent.parent / "web" / "recorded_sounds.json"
+SCENE_MANIFEST_PATH: Path = Path(__file__).resolve().parent.parent / "web" / "scene_recorded_sounds.json"
+SCENE_ASSET_COUNT: int = 42
 SAMPLE_CONTENT: bytes = b"fake mp3 content"
 RELEASE_BASE_URL: str = "https://github.com/example/demo/releases/download/sound-assets-v1"
 
@@ -81,6 +83,14 @@ def test_repository_manifest_uses_only_cc0_recordings() -> None:
     raw_manifest = json.loads(REPOSITORY_MANIFEST_PATH.read_text(encoding="utf-8"))
     parsed_manifest = parse_recorded_sound_manifest(raw_manifest)
     assert {recording.license_name for recording in parsed_manifest.recordings} == {"CC0 1.0"}
+
+
+def test_scene_manifest_parses_with_cc0_recordings_for_all_scene_assets() -> None:
+    raw_manifest = json.loads(SCENE_MANIFEST_PATH.read_text(encoding="utf-8"))
+    parsed_manifest = parse_recorded_sound_manifest(raw_manifest)
+    assert len(parsed_manifest.recordings) == SCENE_ASSET_COUNT
+    assert {recording.license_name for recording in parsed_manifest.recordings} == {"CC0 1.0"}
+    assert parsed_manifest.release_base_url.endswith("/scene-assets-v1")
 
 
 def test_asset_download_url_joins_release_base_and_file_name() -> None:

@@ -28,7 +28,16 @@ test("downloaded recording directory is ignored by version control", () => {
   assert.match(ignored_check, /recorded_sounds\/cat_meow\.mp3/);
 });
 
-test("page does not reference audio files", () => {
-  const page_source = readFileSync(join(WEB_DIRECTORY, "index.html"), "utf8");
-  assert.doesNotMatch(page_source, /["'][^"']*\.(wav|m4a|aac|mp3|ogg|flac)["']/i);
+for (const page_file_name of ["index.html", "scene_sounds.html"]) {
+  test(`${page_file_name} does not reference audio files`, () => {
+    const page_source = readFileSync(join(WEB_DIRECTORY, page_file_name), "utf8");
+    assert.doesNotMatch(page_source, /["'][^"']*\.(wav|m4a|aac|mp3|ogg|flac)["']/i);
+  });
+}
+
+test("scene recording directory is ignored by version control", () => {
+  const ignored_check = execFileSync("git", ["check-ignore", "scene_recorded_sounds/dog_bark.mp3"], {
+    cwd: WEB_DIRECTORY, encoding: "utf8", timeout: GIT_COMMAND_TIMEOUT_MILLISECONDS,
+  });
+  assert.match(ignored_check, /scene_recorded_sounds\/dog_bark\.mp3/);
 });
